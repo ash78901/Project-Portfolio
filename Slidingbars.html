@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width,initial-scale=1" />
+<title>Decision maker</title>
+<link rel="stylesheet" href="style2.css">
+  
+</head>
+<body>
+  <div class="app" id="app">
+    <header>
+      <div>
+        <h1>Interactive Draggable Bars</h1>
+        <p class="sub">Drag the handle on each bar or use the slider below it to change its value (0–100).</p>
+      </div>
+      <div>
+        <button id="addBarBtn">+ Add Bar</button> <!-- This button adds a new bar -->
+        <button id="resetBtn">Reset</button> <!-- This button resets all bars -->
+      </div>
+    </header>
+
+    <section class="graph-area" id="graph"></section> <!-- Bars will be added here -->
+
+    <div class="controls" id="controls"></div> <!-- Sliders and remove buttons will be added here -->
+
+  </div>
+
+  <script>
+    // Utility function to create an HTML element with attributes and children
+    function create(tag, attrs = {}, ...children) {
+      const el = document.createElement(tag); 
+      for (const k in attrs) {
+      if (k === 'class') el.className = attrs[k]; // Set class name
+      else if (k === 'style') Object.assign(el.style, attrs[k]); // Apply inline styles
+      else if (k.startsWith('data-')) el.setAttribute(k, attrs[k]); // Set data attributes
+      else el[k] = attrs[k]; // Set other attributes
+      }
+      children.forEach(c => {
+      if (typeof c === 'string') el.appendChild(document.createTextNode(c)); // Add text nodes
+      else if (c) el.appendChild(c); // Add child elements
+      });
+      return el; // Return the created element
+    }
+    
+    // Get references to key DOM elements
+    const graph = document.getElementById('graph');
+    const controls = document.getElementById('controls');
+    const addBarBtn = document.getElementById('addBarBtn');
+    const resetBtn = document.getElementById('resetBtn');
+    
+    let bars = []; // Array to store bar objects
+    
+    // Function to add a new bar
+    function addBar(name = null, initial = Math.floor(Math.random()*61)+20) {
+      const id = Math.random().toString(36).slice(2,9); // Generate a unique ID
+      const bar = create('div',{class:'bar', id: 'bar-' + id}); // Create bar container
+      const label = create('div',{class:'label'}, name || ('Bar ' + (bars.length+1))); // Create bar label
+      const viewport = create('div',{class:'bar-viewport'}); // Create viewport for the bar
+      const fill = create('div',{class:'bar-fill'}); // Create fill element
+      const handle = create('div',{class:'drag-handle'}); // Create draggable handle
+      const bubble = create('div',{class:'value-bubble'}, String(initial)); // Create value bubble
+    
+      const controlCard = create('div',{class:'control-card'}); // Create control card
+      const sliderLabel = create('div',{}, label.cloneNode(true).textContent); // Create slider label
+      const slider = create('input',{type:'range', min:0, max:100, value:initial}); // Create slider input
+    
+      // Assemble the bar elements
+      fill.appendChild(handle);
+      viewport.appendChild(bubble);
+      viewport.appendChild(fill);
+      bar.appendChild(label);
+      bar.appendChild(viewport);
+      graph.appendChild(bar);
+    
+      // Assemble the control card elements
+      const controlWrapper = create('div',{class:'control-card'});
+      controlWrapper.appendChild(sliderLabel);
+      controlWrapper.appendChild(slider);
+      const removeBtn = create('button',{}, 'Remove'); // Create remove button
+      controlWrapper.appendChild(removeBtn);
+      controls.appendChild(controlWrapper);
+    
+      // Create an entry for the bar and store it in the bars array
+      const entry = { id, el: bar, fill, handle, viewport, bubble, slider, controlWrapper, label, value: initial };
+      bars.push(entry);
+      setBarValue(entry, initial, true); // Set the initial value of the bar
+    
+      // Add event listeners for dragging, slider input, and removing the bar
+      handle.addEventListener('pointerdown', startDrag(entry));
+      slider.addEventListener('input', () => setBarValue(entry, Number(slider.value)));
+      removeBtn.addEventListener('click', () => {
+      graph.removeChild(bar); // Remove bar from graph
+      controls.removeChild(controlWrapper); // Remove control card
+      bars = bars.filter(b => b !== entry); // Remove bar from the array
+      });
+    }
+    
+    // Function to handle dragging of the bar handle
+    function startDrag(entry) {
+      return function (ev) {
+      ev.preventDefault(); // Prevent default behavior
+      entry.handle.setPointerCapture(ev.pointerId); // Capture pointer events
+      const onMove = (e) => {
+        const rect = entry.viewport.getBoundingClientRect(); // Get bar viewport dimensions
+        let pct = ((rect.bottom - e.clientY) / rect.height) * 100; // Calculate percentage based on pointer position
+        pct = Math.max(0, Math.min(100, pct)); // Clamp percentage between 0 and 100
+        setBarValue(entry, Math.round(pct)); // Update bar value
+      };
+      const onUp = () => {
+        try { entry.handle.releasePointerCapture(ev.pointerId); } catch {} // Release pointer capture
+        window.removeEventListener('pointermove', onMove); // Remove move listener
+        window.removeEventListener('pointerup', onUp); // Remove up listener
+      };
+      window.addEventListener('pointermove', onMove); // Add move listener
+      window.addEventListener('pointerup', onUp); // Add up listener
+      };
+    }
+    
+    // Function to set the value of a bar
+    function setBarValue(entry, val, skipRange = false) {
+      const oldVal = entry.value; // Store the old value
+      entry.value = Math.max(0, Math.min(100, val)); // Clamp value between 0 and 100
+      entry.fill.style.height = entry.value + '%'; // Update fill height
+      entry.bubble.textContent = entry.value; // Update bubble text
+      entry.bubble.style.top = (-36 - (entry.value/100)*6) + 'px'; // Adjust bubble position
+      if (!skipRange) entry.slider.value = entry.value; // Update slider value if not skipped
+    
+      // Adjust the next bar in the list inversely
+      const idx = bars.indexOf(entry);
+      if (bars.length > 1) {
+      const target = bars[(idx + 1) % bars.length]; // Get the next bar
+      const diff = entry.value - oldVal; // Calculate the difference
+      let newVal = target.value - diff; // Adjust the next bar's value
+      newVal = Math.max(0, Math.min(100, newVal)); // Clamp the value
+      target.value = newVal; // Update the next bar's value
+      target.fill.style.height = target.value + '%'; // Update the next bar's fill height
+      target.bubble.textContent = target.value; // Update the next bar's bubble text
+      target.slider.value = target.value; // Update the next bar's slider value
+      }
+    }
+    
+    // Add initial bars
+    for (let i=0;i<4;i++) addBar(null, 25*i);
+    
+    // Add event listener to the "Add Bar" button
+    addBarBtn.addEventListener('click', () => addBar(null, 30));
+    
+    // Add event listener to the "Reset" button
+    resetBtn.addEventListener('click', () => {
+      graph.innerHTML = ''; // Clear the graph area
+      controls.innerHTML = ''; // Clear the controls area
+      bars = []; // Reset the bars array
+      for (let i=0;i<4;i++) addBar(null, 25*i); // Add initial bars
+    });
+    
+    // Adjust bar values on window resize
+    window.addEventListener('resize', () => bars.forEach(b => setBarValue(b, b.value, true)));
+    </script>
+</body>    
+</html>
